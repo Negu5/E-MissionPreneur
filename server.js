@@ -14,7 +14,7 @@ const {
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: 'https://e-missionpreneur.netlify.app' }));
 
 // ════════════════════════════
 // CONNECT TO MONGODB
@@ -166,7 +166,8 @@ app.post('/api/forgot-password', async (req, res) => {
     );
 
     // Build reset link — change to your live URL when deployed
-    const BASE_URL  = process.env.FRONTEND_URL || 'http://127.0.0.1:5500/NEW';
+    const BASE_URL  = process.env.FRONTEND_URL || 'https://e-missionpreneur.netlify.app';
+
     const resetLink = `${BASE_URL}/reset-password.html?token=${resetToken}`;
 
     console.log(`\n🔑 Reset requested: ${user.email}`);
