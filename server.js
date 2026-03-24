@@ -27,14 +27,18 @@ mongoose.connect(process.env.MONGO_URI)
 // EMAIL TRANSPORTER (Gmail)
 // ════════════════════════════
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, 
   auth: {
-    user: process.env.EMAIL_USER,  // your Gmail address
-    pass: process.env.EMAIL_PASS   // your 16-char App Password
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false 
   }
 });
 
-// Test email connection on startup
 transporter.verify((err, success) => {
   if (err) {
     console.warn('⚠️  Email not configured:', err.message);
@@ -44,7 +48,6 @@ transporter.verify((err, success) => {
   }
 });
 
-// ── Helper: send email safely (won't crash server if email fails)
 async function sendEmail(to, subject, html) {
   try {
     const info = await transporter.sendMail({
@@ -57,7 +60,7 @@ async function sendEmail(to, subject, html) {
     return true;
   } catch (err) {
     console.error(`❌ Email failed → ${to}:`, err.message);
-    return false; // Don't crash the server — just log it
+    return false;
   }
 }
 
@@ -68,7 +71,6 @@ app.post('/api/register', async (req, res) => {
   try {
     const { fname, lname, email, company, tier, password } = req.body;
 
-    // Validation
     if (!fname || !lname || !email || !company || !password)
       return res.status(400).json({ message: 'All required fields must be filled.' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -91,7 +93,6 @@ app.post('/api/register', async (req, res) => {
 
     console.log(`✅ Registered: ${user.email}`);
 
-    // ── Send welcome email (async — don't wait for it)
     const { subject, html } = welcomeEmail(user.fname, user.tier);
     sendEmail(user.email, subject, html);
 
@@ -126,7 +127,6 @@ app.post('/api/login', async (req, res) => {
 
     console.log(`✅ Login: ${user.email}`);
 
-    // ── Send login alert email (async — don't wait for it)
     const { subject, html } = loginAlertEmail(user.fname, user.email);
     sendEmail(user.email, subject, html);
 
@@ -155,17 +155,14 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
-    // Always return success (security — don't reveal if email exists)
     if (!user) return res.json({ message: 'If that email exists, a reset link has been sent.' });
 
-    // Generate reset token (1 hour)
     const resetToken = jwt.sign(
       { userId: user._id, email: user.email, purpose: 'reset' },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
 
-    // Build reset link — change to your live URL when deployed
     const BASE_URL  = process.env.FRONTEND_URL || 'https://e-missionpreneur.netlify.app';
 
     const resetLink = `${BASE_URL}/reset-password.html?token=${resetToken}`;
@@ -173,12 +170,10 @@ app.post('/api/forgot-password', async (req, res) => {
     console.log(`\n🔑 Reset requested: ${user.email}`);
     console.log(`📧 Reset link: ${resetLink}\n`);
 
-    // ── Send password reset email
     const { subject, html } = resetPasswordEmail(user.fname, resetLink);
     const sent = await sendEmail(user.email, subject, html);
 
     if (!sent) {
-      // Email failed but still log the link so you can test
       console.log('⚠️  Email failed — use the link above to test manually');
     }
 
@@ -202,7 +197,6 @@ app.post('/api/reset-password', async (req, res) => {
     if (password.length < 8)
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
 
-    // Verify token
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -238,7 +232,6 @@ app.post('/api/contact', async (req, res) => {
     const { name, email, company, tier, message } = req.body;
     console.log(`📩 Inquiry — ${name} (${email}) · ${company}`);
 
-    // Notify admin
     sendEmail(
       process.env.EMAIL_USER,
       `New Contact Inquiry — ${name}`,
@@ -268,7 +261,6 @@ app.get('/api/me', verifyToken, async (req, res) => {
   }
 });
 
-// ── JWT middleware
 function verifyToken(req, res, next) {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided.' });
@@ -292,7 +284,6 @@ app.get("/api/admin/users", verifyAdminToken, async (req, res) => {
   }
 });
 
-// PATCH /api/admin/users/:id/status
 app.patch("/api/admin/users/:id/status", verifyAdminToken, async (req, res) => {
   try {
     const { isActive } = req.body;
@@ -305,7 +296,6 @@ app.patch("/api/admin/users/:id/status", verifyAdminToken, async (req, res) => {
   }
 });
 
-// ── Admin JWT middleware (requires role: admin)
 function verifyAdminToken(req, res, next) {
   const token = req.headers["authorization"]?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "No token provided." });
@@ -321,12 +311,10 @@ function verifyAdminToken(req, res, next) {
   }
 }
 
-// ── Health check
 app.get('/', (req, res) => {
   res.json({ status: '✅ E-MissionPreneur API running', version: '1.0' });
 });
 
-// ── Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`\n🚀 Server → http://localhost:${PORT}`);
