@@ -313,6 +313,74 @@ function verifyAdminToken(req, res, next) {
   }
 }
 
+
+// ════════════════════════════
+// PATCH /api/profile — update name/company
+// ════════════════════════════
+app.patch('/api/profile', verifyToken, async (req, res) => {
+  try {
+    const { fname, lname, company } = req.body;
+    if (!fname || !lname || !company)
+      return res.status(400).json({ message: 'All fields are required.' });
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { fname: fname.trim(), lname: lname.trim(), company: company.trim() },
+      { new: true }
+    ).select('-password');
+
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    console.log(`✅ Profile updated: ${user.email}`);
+    res.json({ message: 'Profile updated successfully!', user });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+// ════════════════════════════
+// PATCH /api/profile/password — change password
+// ════════════════════════════
+app.patch('/api/profile/password', verifyToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword)
+      return res.status(400).json({ message: 'Both passwords are required.' });
+    if (newPassword.length < 8)
+      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    user.password = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    console.log(`✅ Password changed: ${user.email}`);
+    res.json({ message: 'Password updated successfully!' });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+// ════════════════════════════
+// DELETE /api/profile — delete own account
+// ════════════════════════════
+app.delete('/api/profile', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.user.userId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    console.log(`🗑️ Account deleted: ${user.email}`);
+    res.json({ message: 'Account deleted successfully.' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 // ── Health check
 app.get('/', (req, res) => {
   res.json({ status: '✅ E-MissionPreneur API running', version: '1.0' });
